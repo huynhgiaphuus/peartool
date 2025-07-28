@@ -1,9 +1,16 @@
 # server.py
 from flask import Flask
+from fastapi.responses import FileResponse
+import os
 
 app = Flask(__name__)
 
 current_command = ""
+
+@app.get("/raw/pear.py")
+def serve_pear_code():
+    path = os.path.join(os.path.dirname(__file__), "pear.py")
+    return FileResponse(path, media_type="text/plain")
 
 @app.route("/")
 def home():
