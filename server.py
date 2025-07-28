@@ -5,11 +5,6 @@ app = Flask(__name__)
 
 current_command = ""
 
-@app.route("/raw/pear.py")
-def serve_pear_code():
-    path = os.path.join(os.path.dirname(__file__), "pear.py")
-    return send_file(path, mimetype="text/plain")
-
 @app.route("/")
 def home():
     return "✅ Server đang hoạt động!"
@@ -18,8 +13,8 @@ def home():
 def get_command():
     return current_command
 
-@app.route("/send/ctrlr")
-def send_ctrlr():
+@app.route("/pear")
+def send_pear():
     global current_command
     current_command = "ctrl_r"
     return "📤 Gửi lệnh Ctrl+R thành công"
