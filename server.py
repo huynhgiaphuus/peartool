@@ -24,3 +24,6 @@ def clear_command():
     global current_command
     current_command = ""
     return "🧹 Đã xóa lệnh"
+    
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
