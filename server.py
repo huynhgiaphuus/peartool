@@ -1,4 +1,4 @@
-from flask import Flask, request
+from flask import Flask, request, send_file
 import threading
 import time
 import os
@@ -9,7 +9,7 @@ app = Flask(__name__)
 # Global variables
 current_command = ""
 current_version = "1.0.0"
-LATEST_CODE_FILE = "pear_tool_latest.py"
+LATEST_EXE_FILE = "pear_tool_latest.exe"
 VERSION_FILE = "current_version.txt"
 
 def load_version():
@@ -51,11 +51,13 @@ load_version()
 
 @app.route("/")
 def home():
+    exe_size = os.path.getsize(LATEST_EXE_FILE) if os.path.exists(LATEST_EXE_FILE) else 0
     return f"""
-    <h1>🍐 Pear Tool Server</h1>
+    <h1>🍐 Pear Tool Server - EXE Update</h1>
     <p>✅ Server đang hoạt động!</p>
     <p>📋 Version hiện tại: <strong>{current_version}</strong></p>
     <p>📡 Lệnh hiện tại: <strong>"{current_command}"</strong></p>  
+    <p>📦 EXE file: <strong>{exe_size} bytes</strong></p>
     <p>⏰ Thời gian: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>
     
     <hr>
@@ -64,8 +66,8 @@ def home():
         <li><strong>GET /command</strong> - Lấy lệnh hiện tại</li>
         <li><strong>GET /pear</strong> - Gửi lệnh Ctrl+R (tự xóa sau 20s)</li>
         <li><strong>GET /version</strong> - Lấy phiên bản hiện tại</li>
-        <li><strong>GET /update</strong> - Tải code mới nhất</li>
-        <li><strong>POST /push_update</strong> - Push code mới</li>
+        <li><strong>GET /update_exe</strong> - Tải EXE mới nhất</li>
+        <li><strong>POST /push_exe</strong> - Push EXE mới</li>
         <li><strong>POST /force_update</strong> - Bắt buộc tất cả client update</li>
     </ul>
     
@@ -99,65 +101,68 @@ def auto_clear_command():
     current_command = ""
     print(f"🧹 [{datetime.now().strftime('%H:%M:%S')}] Đã tự động xóa lệnh sau 20s")
 
-# ========== AUTO-UPDATE ENDPOINTS ==========
+# ========== EXE UPDATE ENDPOINTS ==========
 
 @app.route("/version")
 def get_version():
     """Lấy phiên bản hiện tại"""
     return current_version
 
-@app.route("/update")
-def get_update():
-    """Tải code mới nhất"""
+@app.route("/update_exe")
+def get_exe_update():
+    """Download EXE file mới nhất"""
     try:
-        if os.path.exists(LATEST_CODE_FILE):
-            with open(LATEST_CODE_FILE, 'r', encoding='utf-8') as f:
-                latest_code = f.read()
-            print(f"📤 [{datetime.now().strftime('%H:%M:%S')}] Client đã tải update")
-            return latest_code
+        if os.path.exists(LATEST_EXE_FILE):
+            print(f"📤 [{datetime.now().strftime('%H:%M:%S')}] Client đang tải EXE update")
+            return send_file(
+                LATEST_EXE_FILE, 
+                as_attachment=True,
+                download_name="pear_tool_updated.exe",
+                mimetype='application/octet-stream'
+            )
         else:
-            return "No update available", 404
+            return "No EXE update available", 404
     except Exception as e:
-        print(f"❌ Error reading update: {e}")
-        return f"Error reading update: {str(e)}", 500
+        print(f"❌ Error sending EXE: {e}")
+        return f"Error sending EXE: {str(e)}", 500
 
-@app.route("/push_update", methods=['POST'])
-def push_update():
-    """Push code mới từ developer"""
+@app.route("/push_exe", methods=['POST'])
+def push_exe():
+    """Push EXE file mới từ developer"""
     try:
-        # Lấy code từ request body
-        new_code = request.get_data(as_text=True)
+        # Lấy EXE data từ request body
+        exe_data = request.get_data()
         
-        if not new_code:
-            return "❌ Không có code được gửi", 400
+        if not exe_data:
+            return "❌ Không có EXE file được gửi", 400
         
-        if len(new_code) < 100:
-            return "❌ Code quá ngắn, không hợp lệ", 400
+        if len(exe_data) < 1000:  # EXE phải lớn hơn 1KB
+            return "❌ EXE file quá nhỏ, không hợp lệ", 400
         
-        # Validation cơ bản
-        if "def main(" not in new_code:
-            return "❌ Code phải có function main()", 400
+        # Kiểm tra có phải EXE file không (bắt đầu với MZ)
+        if not exe_data.startswith(b'MZ'):
+            return "❌ File không phải là EXE hợp lệ", 400
         
-        # Kiểm tra syntax Python
-        try:
-            compile(new_code, '<string>', 'exec')
-        except SyntaxError as e:
-            return f"❌ Lỗi syntax Python: {str(e)}", 400
+        # Backup EXE cũ nếu có
+        if os.path.exists(LATEST_EXE_FILE):
+            backup_name = f"pear_tool_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.exe"
+            os.rename(LATEST_EXE_FILE, backup_name)
+            print(f"📁 Backup EXE cũ: {backup_name}")
         
-        # Lưu code mới
-        with open(LATEST_CODE_FILE, 'w', encoding='utf-8') as f:
-            f.write(new_code)
+        # Lưu EXE mới
+        with open(LATEST_EXE_FILE, 'wb') as f:
+            f.write(exe_data)
         
         # Tăng version
         new_version = increment_version()
         
-        print(f"🚀 [{datetime.now().strftime('%H:%M:%S')}] Code mới được push! Version: {new_version}")
-        print(f"📏 Code size: {len(new_code)} characters")
+        print(f"🚀 [{datetime.now().strftime('%H:%M:%S')}] EXE mới được push! Version: {new_version}")
+        print(f"📏 EXE size: {len(exe_data)} bytes")
         
-        return f"✅ Push thành công! Version mới: {new_version}"
+        return f"✅ Push EXE thành công! Version mới: {new_version}"
         
     except Exception as e:
-        print(f"❌ Push error: {e}")
+        print(f"❌ Push EXE error: {e}")
         return f"❌ Lỗi: {str(e)}", 500
 
 @app.route("/force_update", methods=['GET', 'POST'])
@@ -211,8 +216,8 @@ def get_status():
         "server_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "current_command": current_command,
         "current_version": current_version,
-        "update_file_exists": os.path.exists(LATEST_CODE_FILE),
-        "update_file_size": os.path.getsize(LATEST_CODE_FILE) if os.path.exists(LATEST_CODE_FILE) else 0
+        "exe_file_exists": os.path.exists(LATEST_EXE_FILE),
+        "exe_file_size": os.path.getsize(LATEST_EXE_FILE) if os.path.exists(LATEST_EXE_FILE) else 0
     }
     
     return f"""
@@ -221,9 +226,25 @@ def get_status():
     <p><a href="/">← Back to Home</a></p>
     """
 
+@app.route("/download_exe")
+def download_exe_direct():
+    """Direct download EXE (for testing)"""
+    try:
+        if os.path.exists(LATEST_EXE_FILE):
+            return send_file(
+                LATEST_EXE_FILE,
+                as_attachment=True,
+                download_name=f"pear_tool_v{current_version}.exe"
+            )
+        else:
+            return "No EXE file available", 404
+    except Exception as e:
+        return f"Error: {str(e)}", 500
+
 if __name__ == "__main__":
-    print("🍐 Pear Tool Server Starting...")
+    print("🍐 Pear Tool Server Starting - EXE Update Mode...")
     print(f"📋 Initial version: {current_version}")
+    print(f"📦 EXE file: {LATEST_EXE_FILE}")
     print(f"🌐 Server will run on http://0.0.0.0:5000")
     print("=" * 50)
     
